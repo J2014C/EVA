@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+eva_config.json
+eva_data.json
+*.pem
+*.key
+.DS_Store

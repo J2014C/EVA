@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EVA</title>
+<style>
+    :root { --bg-main: #5c5e60; --bg-chat: #dfdfdf; --text-chat: #111; }
+    * { box-sizing: border-box; }
+    body { margin:0; padding:10px; background:#2b2b2b; font-family:-apple-system,sans-serif; color:#fff; height:100vh; display:flex; justify-content:center; align-items:center; }
+    .eva-app { display:flex; width:100%; height:100%; max-width:1400px; background:var(--bg-main); border-radius:20px; overflow:hidden; }
+    .col-left { width:300px; display:flex; flex-direction:column; align-items:center; padding:30px 20px; flex-shrink:0; }
+    .orb-container { width:160px; height:160px; cursor:pointer; margin-bottom:20px; }
+    .orb-img { width:100%; height:100%; object-fit:contain; clip-path:circle(50% at 50% 50%); transition:transform 0.05s; filter:drop-shadow(0 0 30px rgba(255,0,0,0.6)); }
+    .orb-img.recording { animation:pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100% { filter:drop-shadow(0 0 30px rgba(255,0,0,0.6)); } 50% { filter:drop-shadow(0 0 60px rgba(255,0,0,0.9)); } }
+    .speech-bubble { background:#d1d1d1; color:#111; padding:20px; border-radius:20px; font-size:1.3rem; width:100%; min-height:100px; max-height:200px; overflow-y:auto; }
+    .stop-btn { display:none; margin-top:15px; padding:10px 20px; background:#b30000; color:white; border:none; border-radius:20px; cursor:pointer; font-weight:600; }
+    .col-mid { width:0; opacity:0; overflow:hidden; transition:all 0.4s; flex-shrink:0; display:flex; flex-direction:column; gap:15px; }
+    .col-mid.active { width:400px; opacity:1; padding:20px; }
+    .col-mid.multi-mode { width:600px; }
+    .widget-dark { background:#1c1c1e; color:#fff; border-radius:20px; padding:20px; width:100%; height:100%; overflow-y:auto; display:flex; flex-direction:column; }
+    .cal-container { display:flex; flex-direction:column; height:100%; }
+    .cal-header { display:flex; justify-content:space-between; align-items:center; font-size:1.2rem; font-weight:600; margin-bottom:15px; }
+    .cal-header .nav { cursor:pointer; color:#888; font-size:1.5rem; padding:0 10px; }
+    .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:5px; text-align:center; }
+    .cal-day-name { color:#888; font-size:0.85rem; margin-bottom:5px; }
+    .cal-day { position:relative; padding:8px 0; border-radius:50%; font-size:0.95rem; cursor:pointer; color:#ddd; }
+    .cal-day:hover { background:#333; }
+    .cal-day.other { color:#555; }
+    .cal-day.today { color:#8ab4f8; font-weight:700; }
+    .cal-day.selected { background:#8ab4f8; color:#1c1c1e; font-weight:700; }
+    .cal-day .dot { position:absolute; bottom:4px; left:50%; transform:translateX(-50%); width:4px; height:4px; border-radius:50%; background:#ff4d4d; }
+    .agenda-view { flex:1; overflow-y:auto; border-top:1px solid #333; margin-top:15px; padding-top:10px; }
+    .agenda-hour { display:flex; border-bottom:1px solid #222; min-height:40px; }
+    .agenda-hour-label { width:50px; font-size:0.75rem; color:#666; text-align:right; padding-right:10px; padding-top:4px; flex-shrink:0; }
+    .agenda-hour-content { flex:1; padding:4px 8px; font-size:0.85rem; }
+    .event-block { background:rgba(34,139,34,0.8); border-left:3px solid #22aa22; padding:4px 8px; border-radius:4px; margin-bottom:2px; }
+    .multi-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; height:100%; }
+    .multi-tile { background:#1c1c1e; border-radius:16px; overflow:hidden; display:flex; flex-direction:column; }
+    .multi-tile.map-tile, .multi-tile.img-tile { background:#fff; }
+    .multi-tile img { width:100%; height:100%; object-fit:cover; }
+    .multi-tile iframe { width:100%; height:100%; border:none; }
+    .col-right { flex:1; background:var(--bg-chat); display:flex; flex-direction:column; padding:30px; color:var(--text-chat); }
+    .chat-header { font-size:1.8rem; font-weight:700; padding-bottom:15px; margin-bottom:15px; border-bottom:1px solid rgba(0,0,0,0.1); }
+    .chat-messages { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:15px; padding-right:10px; }
+    .msg { padding:15px 20px; border-radius:15px; max-width:80%; font-size:1.05rem; line-height:1.4; word-wrap:break-word; }
+    .msg.user { background:#a0a0a0; color:#fff; align-self:flex-end; }
+    .msg.eva { background:#fff; color:#111; align-self:flex-start; }
+    .msg.action { background:#d1e7dd; color:#0f5132; align-self:center; font-size:0.9rem; font-weight:600; padding:10px 20px; border-radius:20px; }
+    .msg.action.err { background:#f8d7da; color:#842029; }
+    .chat-input-area { padding-top:20px; display:flex; gap:15px; }
+    .chat-input-area input { flex:1; padding:15px 20px; border-radius:30px; border:1px solid #ddd; font-size:1.1rem; outline:none; }
+    .chat-input-area button { background:#b30000; border:none; color:white; width:60px; height:60px; border-radius:50%; cursor:pointer; font-size:1.5rem; }
+    /* Ekran startowy */
+    #setup-screen { position:fixed; top:0; left:0; width:100%; height:100%; background:#2b2b2b; z-index:9999; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#fff; }
+    .setup-step { display:none; flex-direction:column; align-items:center; gap:20px; }
+    .setup-step.active { display:flex; }
+    .setup-row { display:flex; align-items:center; gap:20px; }
+    .setup-bubble { background:#fff; padding:20px; border-radius:15px; color:#111; font-size:1.2rem; box-shadow:0 10px 20px rgba(0,0,0,0.2); }
+    .setup-orb { width:120px; height:120px; filter:drop-shadow(0 0 30px rgba(255,0,0,0.6)); }
+    .setup-btn { padding:15px 30px; border-radius:30px; border:none; background:#b30000; color:white; font-size:1.2rem; cursor:pointer; font-weight:bold; }
+    .setup-btn:hover { background:#ff0000; }
+    .setup-input { padding:15px; border-radius:10px; border:none; width:300px; font-size:1.1rem; outline:none; }
+    .theme-grid { display:grid; grid-template-columns:1fr 1fr; gap:15px; }
+    .theme-card { background:#fff; border-radius:12px; padding:15px; cursor:pointer; text-align:center; color:#111; }
+    .theme-card:hover { transform:scale(1.05); }
+    @media (max-width: 1000px) {
+        body { padding:0; }
+        .eva-app { flex-direction:column; border-radius:0; height:100vh; overflow-y:auto; }
+        .col-left { width:100%; padding:20px; }
+        .orb-container { width:120px; height:120px; }
+        .col-mid.active { width:100%; padding:20px; height:400px; }
+        .col-mid.multi-mode { width:100%; height:600px; }
+        .col-right { padding:20px; height:500px; }
+    }
+</style>
+</head>
+<body>
+
+<div id="setup-screen">
+    <div id="step-1" class="setup-step active">
+        <div class="setup-row">
+            <img src="/orb.png" class="setup-orb">
+            <div class="setup-bubble">Hej, jestem EVA.<br>Twoja cyfrowa asystentka.</div>
+        </div>
+        <button class="setup-btn" onclick="nextStep(2)">Dalej</button>
+    </div>
+    <div id="step-2" class="setup-step">
+        <div class="setup-row">
+            <img src="/orb.png" class="setup-orb">
+            <div class="setup-bubble">Wpisz swoj klucz API z Groq,<br>aby polaczyc model AI.</div>
+        </div>
+        <div style="display:flex; gap:10px;">
+            <input type="password" id="api-input" class="setup-input" placeholder="Wklej klucz API...">
+            <button class="setup-btn" onclick="saveApi()">Polacz</button>
+        </div>
+        <div id="api-error" style="color:#ff4d4d; font-weight:bold; font-size:0.9rem;"></div>
+    </div>
+    <div id="step-3" class="setup-step">
+        <div class="setup-row">
+            <img src="/orb.png" class="setup-orb" style="width:80px; height:80px;">
+            <div class="setup-bubble">Udalo sie polaczyc!</div>
+        </div>
+        <div class="setup-row">
+            <img src="/orb.png" class="setup-orb" style="width:60px; height:60px;">
+            <div class="setup-bubble">Wybierz motyw aplikacji</div>
+        </div>
+        <div class="theme-grid">
+            <div class="theme-card" onclick="saveTheme('dark')"><b>Ciemny</b><div style="display:flex; width:100px; height:50px; border-radius:8px; overflow:hidden; margin:5px auto; border:1px solid #555;"><div style="width:30%; background:#5c5e60;"></div><div style="width:70%; background:#dfdfdf;"></div></div></div>
+            <div class="theme-card" onclick="saveTheme('light')"><b>Jasny</b><div style="display:flex; width:100px; height:50px; border-radius:8px; overflow:hidden; margin:5px auto; border:1px solid #ccc;"><div style="width:30%; background:#e0e0e0;"></div><div style="width:70%; background:#ffffff;"></div></div></div>
+            <div class="theme-card" onclick="saveTheme('red')"><b>Czerwony</b><div style="display:flex; width:100px; height:50px; border-radius:8px; overflow:hidden; margin:5px auto; border:1px solid #555;"><div style="width:30%; background:#b30000;"></div><div style="width:70%; background:#2b2b2b;"></div></div></div>
+            <div class="theme-card" onclick="saveTheme('blue')"><b>Niebieski</b><div style="display:flex; width:100px; height:50px; border-radius:8px; overflow:hidden; margin:5px auto; border:1px solid #555;"><div style="width:30%; background:#1e3a8a;"></div><div style="width:70%; background:#e0f2fe;"></div></div></div>
+        </div>
+    </div>
+</div>
+
+<div class="eva-app">
+    <div class="col-left">
+        <div class="orb-container" id="orbBtn"><img src="/orb.png" class="orb-img" id="orb"></div>
+        <div class="speech-bubble" id="bubble">Hej, jestem EVA.</div>
+        <button id="stopBtn" class="stop-btn">Zatrzymaj mowe</button>
+    </div>
+    <div class="col-mid" id="colMid"></div>
+    <div class="col-right">
+        <div class="chat-header">nasz czat</div>
+        <div class="chat-messages" id="chatMessages">
+            <div class="msg eva">Czesc! Popros mnie np. o mape, zdjecia, kalendarz lub tryb wielookienkowy.</div>
+        </div>
+        <div class="chat-input-area">
+            <input type="text" id="chatInput" placeholder="Napisz wiadomosc..." autocomplete="off">
+            <button id="sendBtn">></button>
+        </div>
+    </div>
+</div>
+<audio id="audioPlayer"></audio>
+<script>
+const orbBtn = document.getElementById('orbBtn');
+const orb = document.getElementById('orb');
+const bubble = document.getElementById('bubble');
+const audioPlayer = document.getElementById('audioPlayer');
+const chatInput = document.getElementById('chatInput');
+const sendBtn = document.getElementById('sendBtn');
+const chatMessages = document.getElementById('chatMessages');
+const stopBtn = document.getElementById('stopBtn');
+const colMid = document.getElementById('colMid');
+let mediaRecorder = null, audioChunks = [], isRecording = false;
+let evaEvents = [];
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth();
+let selectedDate = new Date().toISOString().split('T')[0];
+
+async function speakOnboarding(text) {
+    try {
+        const res = await fetch('/api/speak', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text:text}) });
+        const data = await res.json();
+        if (data.audio_b64) {
+            audioPlayer.src = 'data:audio/mpeg;base64,' + data.audio_b64;
+            audioPlayer.play();
+        }
+    } catch(e) { console.log(e); }
+}
+
+async function checkConfig() {
+    const res = await fetch('/api/config');
+    const data = await res.json();
+    if (data.configured) {
+        document.getElementById('setup-screen').style.display = 'none';
+        applyTheme(data.theme || 'dark');
+    } else {
+        document.getElementById('step-1').classList.add('active');
+        setTimeout(() => speakOnboarding('Hej, jestem EVA. Twoja cyfrowa asystentka.'), 500);
+    }
+}
+function nextStep(n) {
+    document.querySelectorAll('.setup-step').forEach(e => e.classList.remove('active'));
+    document.getElementById('step-' + n).classList.add('active');
+    if (n === 2) speakOnboarding('Wpisz swoj klucz API z Groq, aby polaczyc model.');
+}
+async function saveApi() {
+    const key = document.getElementById('api-input').value.trim();
+    if (!key) return;
+    document.getElementById('api-error').innerText = 'Sprawdzanie...';
+    speakOnboarding('Sprawdzam klucz.');
+    const res = await fetch('/api/config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({api_key:key}) });
+    const data = await res.json();
+    if (data.ok) {
+        nextStep(3);
+        setTimeout(() => speakOnboarding('Udalo sie polaczyc! Wybierz motyw aplikacji.'), 500);
+    } else {
+        document.getElementById('api-error').innerText = 'Blad: ' + data.error;
+        speakOnboarding('Wystapil blad. Sprobuj ponownie.');
+    }
+}
+async function saveTheme(t) {
+    await fetch('/api/config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({theme:t}) });
+    applyTheme(t);
+    document.getElementById('setup-screen').style.display = 'none';
+    bubble.innerText = 'Gotowe! Jestem do Twojej dyspozycji.';
+    speakOnboarding('Gotowe! Jestem do Twojej dyspozycji.');
+}
+function applyTheme(t) {
+    const r = document.documentElement;
+    if (t==='light') { r.style.setProperty('--bg-main','#e0e0e0'); r.style.setProperty('--bg-chat','#ffffff'); r.style.setProperty('--text-chat','#111'); }
+    else if (t==='red') { r.style.setProperty('--bg-main','#b30000'); r.style.setProperty('--bg-chat','#2b2b2b'); r.style.setProperty('--text-chat','#fff'); }
+    else if (t==='blue') { r.style.setProperty('--bg-main','#1e3a8a'); r.style.setProperty('--bg-chat','#e0f2fe'); r.style.setProperty('--text-chat','#111'); }
+    else { r.style.setProperty('--bg-main','#5c5e60'); r.style.setProperty('--bg-chat','#dfdfdf'); r.style.setProperty('--text-chat','#111'); }
+}
+
+async function fetchEvents() { const r = await fetch('/api/data'); const d = await r.json(); evaEvents = d.events || []; }
+function getCalendarSkeleton() { return '<div class="cal-container"><div class="cal-header"><span onclick="changeMonth(-1)" class="nav">&lt;</span><span id="calTitle"></span><span onclick="changeMonth(1)" class="nav">&gt;</span></div><div class="cal-grid" id="calGrid"></div><div class="agenda-view" id="agendaView"></div></div>'; }
+function changeMonth(d) { calMonth += d; if (calMonth>11) { calMonth=0; calYear++; } else if (calMonth<0) { calMonth=11; calYear--; } renderCalendarUI(); }
+function selectDay(s) { selectedDate = s; renderCalendarUI(); renderAgendaUI(); }
+function renderCalendarUI() {
+    const m = ['Styczen','Luty','Marzec','Kwiecien','Maj','Czerwiec','Lipiec','Sierpien','Wrzesien','Pazdziernik','Listopad','Grudzien'];
+    const t = document.getElementById('calTitle'); if (t) t.innerText = m[calMonth] + ' ' + calYear;
+    const g = document.getElementById('calGrid'); if (!g) return; g.innerHTML = '';
+    ['P','W','S','C','P','S','N'].forEach(d => g.innerHTML += '<div class="cal-day-name">' + d + '</div>');
+    const n = new Date(); const td = n.toISOString().split('T')[0];
+    const fd = new Date(calYear, calMonth, 1).getDay(); const sd = fd===0?6:fd-1;
+    const dim = new Date(calYear, calMonth+1, 0).getDate();
+    for (let i=0;i<sd;i++) g.innerHTML += '<div></div>';
+    for (let i=1;i<=dim;i++) {
+        const ds = calYear+'-'+String(calMonth+1).padStart(2,'0')+'-'+String(i).padStart(2,'0');
+        const he = evaEvents.some(e => e.date === ds);
+        let cls = 'cal-day'; if (ds===td) cls+=' today'; if (ds===selectedDate) cls+=' selected';
+        g.innerHTML += '<div class="' + cls + '" onclick="selectDay(\'' + ds + '\')">' + i + (he?'<div class="dot"></div>':'') + '</div>';
+    }
+}
+function renderAgendaUI() {
+    const a = document.getElementById('agendaView'); if (!a) return; a.innerHTML = '';
+    const de = evaEvents.filter(e => e.date === selectedDate);
+    if (de.length===0) { a.innerHTML = '<div style="color:#888;font-size:0.9rem;text-align:center;padding:20px;">Brak wydarzen tego dnia.</div>'; return; }
+    const hs = []; de.forEach(e => { let h = parseInt(e.time.split(':')[0]); if (!hs.includes(h)) hs.push(h); });
+    hs.sort((a,b)=>a-b);
+    hs.forEach(h => {
+        const hstr = String(h).padStart(2,'0')+':00';
+        const es = de.filter(e => parseInt(e.time.split(':')[0]) === h);
+        let eh = ''; es.forEach(e => eh += '<div class="event-block">' + e.title + ' (' + e.time + ')</div>');
+        a.innerHTML += '<div class="agenda-hour"><div class="agenda-hour-label">' + hstr + '</div><div class="agenda-hour-content">' + eh + '</div></div>';
+    });
+}
+async function getNotesHTML() {
+    const r = await fetch('/api/data'); const d = await r.json();
+    if (d.notes.length===0) return '<p style="color:#888;">Brak notatek.</p>';
+    let h = ''; d.notes.forEach(n => {
+        h += '<div style="background:#1c1c1e;border:1px solid #333;border-radius:12px;padding:15px;margin-bottom:10px;"><div style="font-weight:600;margin-bottom:5px;">' + (n.text.split('\n')[0]||'Notatka') + '</div><div style="color:#aaa;font-size:0.95rem;">' + n.text + '</div></div>';
+    });
+    return h;
+}
+function getMapHTML(q) { return '<div style="flex:1;border-radius:12px;overflow:hidden;background:#fff;min-height:200px;display:flex;"><iframe src="https://maps.google.com/maps?q=' + encodeURIComponent(q) + '&t=&z=14&ie=UTF8&iwloc=&output=embed" style="width:100%;height:100%;border:none;"></iframe></div>'; }
+async function showWidget(type, query, images, multi) {
+    query = query||''; images = images||[]; multi = multi||[];
+    if (type==='none') { colMid.classList.remove('active','multi-mode'); setTimeout(()=>colMid.innerHTML='',400); return; }
+    await fetchEvents(); colMid.classList.add('active');
+    if (type==='multi') {
+        colMid.classList.add('multi-mode');
+        let h = '<div class="multi-grid">';
+        for (let w of multi) {
+            if (w.type==='map') h += '<div class="multi-tile map-tile">' + getMapHTML(w.query) + '</div>';
+            else if (w.type==='images') { let s = w.images.length>0?w.images[0]:'https://via.placeholder.com/300'; h += '<div class="multi-tile img-tile"><img src="'+s+'"></div>'; }
+            else if (w.type==='calendar') h += '<div class="multi-tile" style="padding:15px;overflow-y:auto;">' + getCalendarSkeleton() + '</div>';
+            else if (w.type==='notes') h += '<div class="multi-tile" style="padding:15px;overflow-y:auto;"><b>Notatki</b><br>' + await getNotesHTML() + '</div>';
+        }
+        h += '</div>'; colMid.innerHTML = h;
+        if (multi.some(w=>w.type==='calendar')) { renderCalendarUI(); renderAgendaUI(); }
+        return;
+    }
+    colMid.classList.remove('multi-mode');
+    if (type==='calendar') { colMid.innerHTML = '<div class="widget-dark">' + getCalendarSkeleton() + '</div>'; renderCalendarUI(); renderAgendaUI(); }
+    else if (type==='map') colMid.innerHTML = '<div class="widget-dark" style="padding:10px;background:#e5e3df;">' + getMapHTML(query||'restauracje') + '</div>';
+    else if (type==='notes') colMid.innerHTML = '<div class="widget-dark"><b>Notatki</b><br>' + await getNotesHTML() + '</div>';
+    else if (type==='both') colMid.innerHTML = '<div style="flex:1;display:flex;flex-direction:column;gap:20px;"><div class="widget-dark" style="padding:10px;background:#e5e3df;flex:1;">' + getMapHTML(query||'restauracje') + '</div><div class="widget-dark" style="flex:1;"><b>Notatki</b><br>' + await getNotesHTML() + '</div></div>';
+    else if (type==='images') {
+        let h = '<div class="widget-dark" style="overflow-y:auto;display:flex;flex-direction:column;gap:10px;">';
+        if (images.length>0) images.forEach(u => h += '<img src="'+u+'" style="width:100%;border-radius:12px;" onerror="this.style.display=\'none\'">');
+        else h += '<p style="color:#888;text-align:center;">Brak zdjec.</p>';
+        h += '</div>'; colMid.innerHTML = h;
+    }
+}
+async function setupMic() {
+    try {
+        if (mediaRecorder && mediaRecorder.state!=='inactive') mediaRecorder.stream.getTracks().forEach(t=>t.stop());
+        const s = await navigator.mediaDevices.getUserMedia({audio:true});
+        let mt = ''; if (MediaRecorder.isTypeSupported('audio/webm')) mt='audio/webm'; else if (MediaRecorder.isTypeSupported('audio/mp4')) mt='audio/mp4';
+        mediaRecorder = new MediaRecorder(s, mt?{mimeType:mt}:undefined);
+        mediaRecorder.ondataavailable = e => { if (e.data.size>0) audioChunks.push(e.data); };
+        mediaRecorder.onstop = async () => {
+            const t = mediaRecorder.mimeType||'audio/webm';
+            const b = new Blob(audioChunks, {type:t}); audioChunks = [];
+            s.getTracks().forEach(t=>t.stop()); mediaRecorder = null;
+            if (b.size<1000) { bubble.innerText='Za krotkie.'; return; }
+            bubble.innerText='...'; await sendAudioToBackend(b, t);
+        };
+        return true;
+    } catch(e) { bubble.innerText='Brak mikrofonu.'; return false; }
+}
+orbBtn.onmousedown = async (e) => {
+    if (e) e.preventDefault(); if (isRecording) return;
+    if (!await setupMic()) return;
+    audioChunks = []; mediaRecorder.start(); isRecording = true;
+    orb.classList.add('recording'); bubble.innerText = 'Slucham...';
+};
+orbBtn.onmouseup = (e) => {
+    if (e) e.preventDefault();
+    if (isRecording && mediaRecorder && mediaRecorder.state==='recording') { mediaRecorder.stop(); isRecording=false; orb.classList.remove('recording'); }
+};
+orbBtn.ontouchstart = (e) => { e.preventDefault(); orbBtn.onmousedown(); };
+orbBtn.ontouchend = (e) => { e.preventDefault(); orbBtn.onmouseup(); };
+
+function addMessage(t, s, err) { const d = document.createElement('div'); d.className = 'msg ' + s + (err?' err':''); d.innerText = t; chatMessages.appendChild(d); chatMessages.scrollTop = chatMessages.scrollHeight; }
+async function sendTextMessage() {
+    const t = chatInput.value.trim(); if (!t) return;
+    addMessage(t, 'user'); chatInput.value = ''; chatInput.disabled = true; sendBtn.disabled = true;
+    try {
+        const r = await fetch('/chat_text', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})});
+        const d = await r.json();
+        if (d.error) addMessage('Blad: '+d.error,'eva',true);
+        else {
+            addMessage(d.eva_text,'eva');
+            bubble.innerText = d.eva_text.length>120?d.eva_text.substring(0,120)+'...':d.eva_text;
+            if (d.audio_b64) playAudio(d.audio_b64);
+            if (d.actions && d.actions.length>0) d.actions.forEach(a => addMessage((a.ok?'[OK] ':'[!] ')+a.message,'action'));
+            if (d.widget) await showWidget(d.widget, d.map_query, d.images, d.multi_widgets);
+        }
+    } catch(e) { addMessage('Blad sieci.','eva',true); }
+    finally { chatInput.disabled=false; sendBtn.disabled=false; chatInput.focus(); }
+}
+sendBtn.addEventListener('click', sendTextMessage);
+chatInput.addEventListener('keypress', e => { if (e.key==='Enter') sendTextMessage(); });
+async function sendAudioToBackend(b, mt) {
+    const fd = new FormData(); const ext = (mt&&mt.includes('mp4'))?'mp4':'webm';
+    fd.append('file', b, 'audio.'+ext);
+    try {
+        const r = await fetch('/chat_audio',{method:'POST',body:fd}); const d = await r.json();
+        if (d.error||!d.eva_text) { bubble.innerText = d.error||'Nic nie uslyszalam.'; return; }
+        bubble.innerText = d.eva_text.length>120?d.eva_text.substring(0,120)+'...':d.eva_text;
+        addMessage(d.user_text,'user'); addMessage(d.eva_text,'eva');
+        if (d.audio_b64) playAudio(d.audio_b64);
+        if (d.actions && d.actions.length>0) d.actions.forEach(a => addMessage((a.ok?'[OK] ':'[!] ')+a.message,'action'));
+        if (d.widget) await showWidget(d.widget, d.map_query, d.images, d.multi_widgets);
+    } catch(e) { bubble.innerText='Blad sieci.'; }
+}
+let audioCtx, analyser, dataArray, animationId;
+function playAudio(b64) {
+    audioPlayer.src = 'data:audio/mpeg;base64,' + b64;
+    orb.classList.add('recording'); stopBtn.style.display = 'block';
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+        analyser = audioCtx.createAnalyser(); analyser.fftSize = 256;
+        const src = audioCtx.createMediaElementSource(audioPlayer);
+        src.connect(analyser); analyser.connect(audioCtx.destination);
+        dataArray = new Uint8Array(analyser.frequencyBinCount);
+    }
+    if (audioCtx.state==='suspended') audioCtx.resume();
+    function viz() {
+        if (!analyser) return;
+        analyser.getByteFrequencyData(dataArray);
+        let sum=0; for (let i=0;i<dataArray.length;i++) sum+=dataArray[i];
+        let avg = sum/dataArray.length; let lvl = Math.round((avg/255)*100);
+        orb.style.transform = 'scale(' + (1.0 + (lvl/100)*0.5) + ')';
+        animationId = requestAnimationFrame(viz);
+    }
+    audioPlayer.play(); viz();
+    audioPlayer.onended = () => { orb.classList.remove('recording'); stopBtn.style.display='none'; cancelAnimationFrame(animationId); orb.style.transform='scale(1.0)'; };
+}
+stopBtn.addEventListener('click', () => { audioPlayer.pause(); audioPlayer.currentTime=0; orb.classList.remove('recording'); stopBtn.style.display='none'; cancelAnimationFrame(animationId); orb.style.transform='scale(1.0)'; });
+
+checkConfig();
+</script>
+</body>
+</html>
